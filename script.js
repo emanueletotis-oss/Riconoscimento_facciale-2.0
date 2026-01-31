@@ -182,8 +182,8 @@ async function startDetection() {
         const resized = faceapi.resizeResults(detections, displaySize);
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        resized.forEach(det => {
-            const { x, y, width, height } = det.detection.box;
+
+        const processedDetections = resized.map(det => {
             let label = "Sconosciuto";
             let matched = false;
             if (selectedTarget) {
@@ -193,11 +193,30 @@ async function startDetection() {
                 const m = faceMatcher.findBestMatch(det.descriptor);
                 if (m.label !== 'unknown') { matched = true; label = m.label; }
             }
-            const color = matched ? "rgb(124, 252, 0)" : "rgb(255, 215, 0)";
-            ctx.strokeStyle = color; ctx.lineWidth = matched ? 6 : 3;
+            return { ...det, label, matched };
+        });
+
+        const hasMatch = processedDetections.some(d => d.matched);
+
+        processedDetections.forEach(det => {
+            // Se c'è un match del target, nascondi gli altri per chiarezza (come da PDF)
+            if (hasMatch && !det.matched) return;
+
+            const { x, y, width, height } = det.detection.box;
+            const color = det.matched ? "rgb(124, 252, 0)" : "rgb(255, 215, 0)";
+            ctx.strokeStyle = color; 
+            ctx.lineWidth = det.matched ? 6 : 3;
             ctx.strokeRect(x, y, width, height);
-            ctx.fillStyle = color; ctx.font = "bold 22px Arial";
-            ctx.fillText(label.toUpperCase(), x, y - 10);
+
+            if (det.matched) {
+                // Doppio riquadro per il target
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x - 8, y - 8, width + 16, height + 16);
+            }
+
+            ctx.fillStyle = color; 
+            ctx.font = "bold 22px Arial";
+            ctx.fillText(det.label.toUpperCase(), x, y - 10);
         });
         requestAnimationFrame(loop);
     };
@@ -241,7 +260,7 @@ document.getElementById('uploadNewTarget').onclick = () => {
             const img = await faceapi.bufferToImage(blob);
             const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
             if (det) { 
-                selectedTarget = { name: "Esterno", photos: [{descriptor: det.descriptor, score: det.score}] }; 
+                selectedTarget = { name: "Target", photos: [{descriptor: det.descriptor, score: det.score}] }; 
             } else { 
                 alert("Volto non trovato!"); 
             }
