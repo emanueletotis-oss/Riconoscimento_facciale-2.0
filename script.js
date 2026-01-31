@@ -4,6 +4,7 @@ const curtain = document.getElementById('videoCurtain');
 const loader = document.getElementById('globalLoader');
 const inputFile = document.getElementById('inputFile');
 const cropModal = document.getElementById('cropModal');
+const targetModal = document.getElementById('targetModal');
 const cropImgElement = document.getElementById('cropImage');
 
 let db = JSON.parse(localStorage.getItem('faceDB_v7')) || [];
@@ -66,7 +67,9 @@ async function openCropper(file, callback) {
         cropper = new Cropper(cropImgElement, {
             aspectRatio: 1,
             viewMode: 1,
-            autoCropArea: 1
+            autoCropArea: 1,
+            responsive: true,
+            restore: false
         });
         onCropComplete = callback;
     };
@@ -86,7 +89,7 @@ document.getElementById('btnCancelCrop').onclick = () => {
     if (cropper) cropper.destroy();
 };
 
-// ACTIONS
+// ACTIONS DB
 document.getElementById('btnAddPhoto').onclick = () => {
     const name = document.getElementById('newName').value;
     if (!name) return alert("Nome mancante!");
@@ -102,7 +105,6 @@ async function addPhotoToDB(name, blob, isEditing = false) {
     toggleLoader(true, "ANALISI BIOMETRICA...");
     const img = await faceapi.bufferToImage(blob);
     const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-    
     if (det) {
         let user = db.find(u => u.name.toLowerCase() === name.toLowerCase());
         const data = { descriptor: det.descriptor, score: det.score };
@@ -119,8 +121,7 @@ function renderDB() {
     const list = document.getElementById('dbList');
     list.innerHTML = db.map((u, i) => {
         const eff = calculateEfficacy(u.photos);
-        return `
-        <div class="db-item">
+        return `<div class="db-item">
             <div class="db-name-box">
                 <span class="db-name">${u.name}</span>
                 <span class="db-efficacy ${eff.class}">${eff.text}</span>
@@ -219,30 +220,38 @@ document.getElementById('btnStop').onclick = () => {
     document.getElementById('placeholder').style.display = 'flex'; selectedTarget = null;
 };
 
+// TARGET SELECTION
 document.getElementById('btnTarget').onclick = () => {
-    document.getElementById('targetModal').style.display = 'flex';
+    targetModal.style.display = 'flex';
     const l = document.getElementById('dbTargetList');
     l.innerHTML = `<div class="mini-item" onclick="selT(null)">🔍 TUTTI</div>` + 
         db.map((u, i) => `<div class="mini-item" onclick="selT(${i})">👤 ${u.name}</div>`).join('');
 };
 
-window.selT = (i) => { selectedTarget = i !== null ? db[i] : null; document.getElementById('targetModal').style.display = 'none'; };
+window.selT = (i) => { selectedTarget = i !== null ? db[i] : null; targetModal.style.display = 'none'; };
 
 document.getElementById('uploadNewTarget').onclick = () => {
     inputFile.onchange = (e) => {
         const file = e.target.files[0]; if(!file) return;
+        // Chiudi il modal del target subito per mostrare il ritagliatore
+        targetModal.style.display = 'none';
+        
         openCropper(file, async (blob) => {
             toggleLoader(true, "ANALISI TARGET...");
             const img = await faceapi.bufferToImage(blob);
             const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-            if (det) { selectedTarget = { name: "Esterno", photos: [{descriptor: det.descriptor, score: det.score}] }; document.getElementById('targetModal').style.display = 'none'; }
-            else { alert("Volto non trovato!"); }
+            if (det) { 
+                selectedTarget = { name: "Esterno", photos: [{descriptor: det.descriptor, score: det.score}] }; 
+            } else { 
+                alert("Volto non trovato!"); 
+            }
             toggleLoader(false);
         });
     };
     inputFile.click();
 };
 
+document.getElementById('closeTargetModal').onclick = () => targetModal.style.display = 'none';
 document.getElementById('btnOpenDB').onclick = () => { document.getElementById('mainScreen').classList.remove('active'); document.getElementById('dbScreen').classList.add('active'); };
 document.getElementById('btnCloseDB').onclick = () => { document.getElementById('dbScreen').classList.remove('active'); document.getElementById('mainScreen').classList.add('active'); };
 document.getElementById('btnSwitch').onclick = () => { currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user'; if(isScanning) document.getElementById('btnStart').click(); };
