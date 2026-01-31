@@ -7,7 +7,8 @@ const cropModal = document.getElementById('cropModal');
 const targetModal = document.getElementById('targetModal');
 const cropImgElement = document.getElementById('cropImage');
 
-let db = JSON.parse(localStorage.getItem('faceDB_v7')) || [];
+// DATABASE V8 - Migliore analisi biometrica
+let db = JSON.parse(localStorage.getItem('faceDB_v8')) || [];
 let faceMatcher = null;
 let isScanning = false;
 let currentFacingMode = 'environment';
@@ -48,16 +49,26 @@ function updateFaceMatcher() {
     } else { faceMatcher = null; }
 }
 
+// ALGORITMO DI EFFICACIA MIGLIORATO
 function calculateEfficacy(photos) {
     if (!photos || photos.length === 0) return { text: "EFFICACIA: 0%", class: "eff-low" };
+    
+    // Media della confidenza AI
     const avgScore = photos.reduce((acc, p) => acc + (p.score || 0), 0) / photos.length;
-    const score = Math.round(avgScore * 100);
-    if (score > 85) return { text: `EFFICACIA: ${score}% (OTTIMA)`, class: "eff-high" };
-    if (score > 60) return { text: `EFFICACIA: ${score}% (MEDIA)`, class: "eff-med" };
+    let score = Math.round(avgScore * 100);
+    
+    // Bonus per numero di campioni (più foto diverse = più stabilità)
+    if (photos.length >= 3) score += 5;
+    if (photos.length >= 5) score += 5;
+    
+    score = Math.min(score, 100);
+
+    if (score > 90) return { text: `EFFICACIA: ${score}% (ECCELLENTE)`, class: "eff-high" };
+    if (score > 70) return { text: `EFFICACIA: ${score}% (BUONA)`, class: "eff-med" };
     return { text: `EFFICACIA: ${score}% (SCARSA)`, class: "eff-low" };
 }
 
-// GESTIONE RITAGLIO
+// GESTIONE RITAGLIO RETTANGOLARE LIBERO
 async function openCropper(file, callback) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -65,9 +76,9 @@ async function openCropper(file, callback) {
         cropModal.style.display = 'flex';
         if (cropper) cropper.destroy();
         cropper = new Cropper(cropImgElement, {
-            aspectRatio: 1,
+            aspectRatio: NaN, // Libero rettangolare
             viewMode: 1,
-            autoCropArea: 1,
+            autoCropArea: 0.8,
             responsive: true,
             restore: false
         });
@@ -77,11 +88,11 @@ async function openCropper(file, callback) {
 }
 
 document.getElementById('btnDoCrop').onclick = () => {
-    const croppedCanvas = cropper.getCroppedCanvas({ width: 400, height: 400 });
+    const croppedCanvas = cropper.getCroppedCanvas();
     croppedCanvas.toBlob(async (blob) => {
         cropModal.style.display = 'none';
         if (onCropComplete) onCropComplete(blob);
-    }, 'image/jpeg');
+    }, 'image/jpeg', 0.9);
 };
 
 document.getElementById('btnCancelCrop').onclick = () => {
@@ -92,7 +103,7 @@ document.getElementById('btnCancelCrop').onclick = () => {
 // ACTIONS DB
 document.getElementById('btnAddPhoto').onclick = () => {
     const name = document.getElementById('newName').value;
-    if (!name) return alert("Nome mancante!");
+    if (!name) return alert("Inserisci un nome!");
     inputFile.onchange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -104,16 +115,29 @@ document.getElementById('btnAddPhoto').onclick = () => {
 async function addPhotoToDB(name, blob, isEditing = false) {
     toggleLoader(true, "ANALISI BIOMETRICA...");
     const img = await faceapi.bufferToImage(blob);
+    // Analisi completa per database
     const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+    
     if (det) {
-        let user = db.find(u => u.name.toLowerCase() === name.toLowerCase());
-        const data = { descriptor: det.descriptor, score: det.score };
-        if (user) user.photos.push(data); else db.push({ name, photos: [data] });
-        localStorage.setItem('faceDB_v7', JSON.stringify(db));
-        updateFaceMatcher(); renderDB();
-        if(isEditing) openEditModal(activeEditIndex);
-        document.getElementById('newName').value = "";
-    } else { alert("VOLTO NON VALIDO NELLA ZONA RITAGLIATA!"); }
+        // Controllo qualità biometrica: volto non troppo inclinato
+        const landmarks = det.landmarks;
+        const nose = landmarks.getNose();
+        const jaw = landmarks.getJawOutline();
+        // Semplice calcolo di centralità
+        const isCentral = Math.abs(nose[0].x - (jaw[0].x + jaw[16].x)/2) < 50;
+
+        if (!isCentral) {
+            alert("Voto scartato: il viso non è abbastanza frontale.");
+        } else {
+            let user = db.find(u => u.name.toLowerCase() === name.toLowerCase());
+            const data = { descriptor: det.descriptor, score: det.score };
+            if (user) user.photos.push(data); else db.push({ name, photos: [data] });
+            localStorage.setItem('faceDB_v8', JSON.stringify(db));
+            updateFaceMatcher(); renderDB();
+            if(isEditing) openEditModal(activeEditIndex);
+            document.getElementById('newName').value = "";
+        }
+    } else { alert("ERRORE: Volto non rilevato nel ritaglio!"); }
     toggleLoader(false);
 }
 
@@ -124,7 +148,7 @@ function renderDB() {
         return `<div class="db-item">
             <div class="db-name-box">
                 <span class="db-name">${u.name}</span>
-                <span class="db-efficacy ${eff.class}">${eff.text}</span>
+                <div class="db-efficacy ${eff.class}">${eff.text}</div>
             </div>
             <div class="db-actions">
                 <button class="btn btn-target" style="padding:6px 12px; font-size:14px;" onclick="openEditModal(${i})">Modifica</button>
@@ -142,21 +166,21 @@ window.openEditModal = (idx) => {
     list.innerHTML = user.photos.map((p, pi) => `
         <div class="photo-item">
             <span>Foto ${pi+1} (Qualità: ${Math.round(p.score*100)}%)</span>
-            <button onclick="removePhoto(${idx}, ${pi})" style="color:red; background:none; border:none; font-size:20px; cursor:pointer;">&times;</button>
+            <button onclick="removePhoto(${idx}, ${pi})" style="color:red; background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
         </div>`).join('');
     document.getElementById('editModal').style.display = 'flex';
 };
 
 document.getElementById('editNameField').oninput = (e) => {
     db[activeEditIndex].name = e.target.value;
-    localStorage.setItem('faceDB_v7', JSON.stringify(db));
+    localStorage.setItem('faceDB_v8', JSON.stringify(db));
     renderDB();
 };
 
 window.removePhoto = (ui, pi) => {
     db[ui].photos.splice(pi, 1);
     if(db[ui].photos.length === 0) { db.splice(ui, 1); document.getElementById('editModal').style.display='none'; }
-    localStorage.setItem('faceDB_v7', JSON.stringify(db));
+    localStorage.setItem('faceDB_v8', JSON.stringify(db));
     updateFaceMatcher(); renderDB();
     if(db[ui]) openEditModal(ui);
 };
@@ -172,7 +196,7 @@ document.getElementById('btnAddNewPhoto').onclick = () => {
 
 document.getElementById('closeEditModal').onclick = () => document.getElementById('editModal').style.display = 'none';
 
-// VIDEO LOGIC
+// VIDEO DETECTION LOOP
 async function startDetection() {
     const displaySize = { width: video.offsetWidth, height: video.offsetHeight };
     faceapi.matchDimensions(canvas, displaySize);
@@ -183,12 +207,12 @@ async function startDetection() {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const processedDetections = resized.map(det => {
+        const processed = resized.map(det => {
             let label = "Sconosciuto";
             let matched = false;
             if (selectedTarget) {
                 const dists = selectedTarget.photos.map(p => faceapi.euclideanDistance(det.descriptor, new Float32Array(Object.values(p.descriptor))));
-                if (Math.min(...dists) < 0.6) { matched = true; label = selectedTarget.name; }
+                if (Math.min(...dists) < 0.6) { matched = true; label = "TARGET"; }
             } else if (faceMatcher) {
                 const m = faceMatcher.findBestMatch(det.descriptor);
                 if (m.label !== 'unknown') { matched = true; label = m.label; }
@@ -196,26 +220,17 @@ async function startDetection() {
             return { ...det, label, matched };
         });
 
-        const hasMatch = processedDetections.some(d => d.matched);
+        const hasMatch = processed.some(d => d.matched);
 
-        processedDetections.forEach(det => {
-            // Se c'è un match del target, nascondi gli altri per chiarezza (come da PDF)
+        processed.forEach(det => {
             if (hasMatch && !det.matched) return;
-
             const { x, y, width, height } = det.detection.box;
             const color = det.matched ? "rgb(124, 252, 0)" : "rgb(255, 215, 0)";
             ctx.strokeStyle = color; 
             ctx.lineWidth = det.matched ? 6 : 3;
             ctx.strokeRect(x, y, width, height);
-
-            if (det.matched) {
-                // Doppio riquadro per il target
-                ctx.lineWidth = 2;
-                ctx.strokeRect(x - 8, y - 8, width + 16, height + 16);
-            }
-
-            ctx.fillStyle = color; 
-            ctx.font = "bold 22px Arial";
+            if (det.matched) { ctx.lineWidth = 2; ctx.strokeRect(x - 8, y - 8, width + 16, height + 16); }
+            ctx.fillStyle = color; ctx.font = "bold 22px Arial";
             ctx.fillText(det.label.toUpperCase(), x, y - 10);
         });
         requestAnimationFrame(loop);
@@ -239,7 +254,7 @@ document.getElementById('btnStop').onclick = () => {
     document.getElementById('placeholder').style.display = 'flex'; selectedTarget = null;
 };
 
-// TARGET SELECTION
+// TARGET LOGIC
 document.getElementById('btnTarget').onclick = () => {
     targetModal.style.display = 'flex';
     const l = document.getElementById('dbTargetList');
@@ -252,18 +267,13 @@ window.selT = (i) => { selectedTarget = i !== null ? db[i] : null; targetModal.s
 document.getElementById('uploadNewTarget').onclick = () => {
     inputFile.onchange = (e) => {
         const file = e.target.files[0]; if(!file) return;
-        // Chiudi il modal del target subito per mostrare il ritagliatore
         targetModal.style.display = 'none';
-        
         openCropper(file, async (blob) => {
             toggleLoader(true, "ANALISI TARGET...");
             const img = await faceapi.bufferToImage(blob);
             const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-            if (det) { 
-                selectedTarget = { name: "Target", photos: [{descriptor: det.descriptor, score: det.score}] }; 
-            } else { 
-                alert("Volto non trovato!"); 
-            }
+            if (det) { selectedTarget = { name: "Target", photos: [{descriptor: det.descriptor, score: det.score}] }; }
+            else { alert("Volto non trovato!"); }
             toggleLoader(false);
         });
     };
@@ -274,4 +284,4 @@ document.getElementById('closeTargetModal').onclick = () => targetModal.style.di
 document.getElementById('btnOpenDB').onclick = () => { document.getElementById('mainScreen').classList.remove('active'); document.getElementById('dbScreen').classList.add('active'); };
 document.getElementById('btnCloseDB').onclick = () => { document.getElementById('dbScreen').classList.remove('active'); document.getElementById('mainScreen').classList.add('active'); };
 document.getElementById('btnSwitch').onclick = () => { currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user'; if(isScanning) document.getElementById('btnStart').click(); };
-window.delP = (i) => { if(confirm("Eliminare profilo?")) { db.splice(i, 1); localStorage.setItem('faceDB_v7', JSON.stringify(db)); updateFaceMatcher(); renderDB(); } };
+window.delP = (i) => { if(confirm("Eliminare profilo?")) { db.splice(i, 1); localStorage.setItem('faceDB_v8', JSON.stringify(db)); updateFaceMatcher(); renderDB(); } };
