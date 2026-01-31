@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#f8f8ff">
+    <title>Face Finder Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script defer src="script.js"></script>
+</head>
+<body>
+
+    <!-- Animazione Pulse (Work in Progress) -->
+    <div id="globalLoader" class="loader-overlay" style="display:none;">
+        <div class="pulse"></div>
+        <p id="loaderText">ELABORAZIONE...</p>
+    </div>
+
+    <!-- SCHERMATA PRINCIPALE -->
+    <div id="mainScreen" class="screen active">
+        <div class="header">
+            <button id="btnTarget" class="btn btn-target">Target</button>
+            <button id="btnOpenDB" class="btn-db-toggle">
+                <img src="image.png" alt="DB" width="55">
+            </button>
+            <div class="right-group">
+                <button id="btnStart" class="btn btn-start">Start</button>
+                <button id="btnStop" class="btn btn-stop">Stop</button>
+            </div>
+        </div>
+
+        <div class="main-viewport">
+            <div class="camera-container">
+                <div id="placeholder" class="placeholder-content">
+                    <svg width="100" height="100" viewBox="0 0 24 24">
+                        <path fill="rgb(192,192,192)" d="M4,4H7L9,2H15L17,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4Z" />
+                        <circle cx="12" cy="12" r="5" fill="rgb(220, 220, 220)" stroke="rgb(192,192,192)" stroke-width="1"/>
+                        <circle cx="12" cy="12" r="3" fill="rgb(192,192,192)"/>
+                    </svg>
+                    <p>SISTEMA PRONTO</p>
+                </div>
+                <video id="video" autoplay muted playsinline webkit-playsinline poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video>
+                <canvas id="overlay"></canvas>
+                <div id="videoCurtain" class="video-curtain"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <button id="btnSwitch" class="btn btn-switch">Cambia Fotocamera</button>
+        </div>
+    </div>
+
+    <!-- SCHERMATA DATABASE -->
+    <div id="dbScreen" class="screen">
+        <div class="header-db">
+            <h2 class="title-db">Database Volti</h2>
+            <button id="btnCloseDB" class="btn btn-stop">Indietro</button>
+        </div>
+        
+        <div class="db-controls">
+            <input type="text" id="newName" placeholder="Nome persona...">
+            <button id="btnAddPhoto" class="btn-add-db">Aggiungi Foto</button>
+        </div>
+
+        <div id="dbList" class="db-list"></div>
+    </div>
+
+    <!-- MODAL GESTIONE PROFILO -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h3>Gestione Profilo</h3>
+            <input type="text" id="editNameField" class="input-edit">
+            <div id="photoStatusList" class="photo-status-list"></div>
+            <button id="btnAddNewPhoto" class="btn btn-start" style="width:100%; margin-top:10px;">Aggiungi Foto</button>
+            <button id="closeEditModal" class="btn" style="width:100%; margin-top:10px; background: white;">Esci</button>
+        </div>
+    </div>
+
+    <!-- MODAL SELEZIONE TARGET -->
+    <div id="targetModal" class="modal">
+        <div class="modal-content">
+            <h3>Scegli Target</h3>
+            <button id="uploadNewTarget" class="btn btn-target" style="width:100%; margin-bottom:15px;">Carica Foto Esterna</button>
+            <div id="dbTargetList" class="db-list-mini"></div>
+            <button id="closeTargetModal" class="btn" style="margin-top:15px; width:100%; background:#fff;">Annulla</button>
+        </div>
+    </div>
+
+    <input type="file" id="inputFile" accept="image/*" style="display:none">
+</body>
+</html>
