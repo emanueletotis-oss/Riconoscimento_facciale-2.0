@@ -13,7 +13,7 @@ body {
 .screen { display: none; flex-direction: column; height: 100%; width: 100%; }
 .screen.active { display: flex; }
 
-/* Pulse Animation Loader */
+/* Loader Pulse */
 .loader-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(248,248,255,0.95); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .pulse { width: 80px; height: 80px; background-color: rgb(50, 205, 50); border-radius: 50%; animation: pulse-anim 1.2s infinite ease-in-out; }
 @keyframes pulse-anim { 0% { transform: scale(0.8); opacity: 0.5; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(0.8); opacity: 0.5; } }
@@ -23,13 +23,13 @@ body {
 .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
 .right-group { display: flex; gap: 10px; }
 
-.btn { border: 2px solid black; border-radius: 12px; padding: 12px 20px; font-weight: 800; font-size: 17px; cursor: pointer; box-shadow: 0 3px 0 #000; color: black !important; }
-.btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #000; }
+.btn { border: 2px solid black; border-radius: 12px; padding: 12px 18px; font-weight: 800; font-size: 16px; cursor: pointer; box-shadow: 0 4px 0 #000; color: black !important; }
+.btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #000; }
 .btn-target { background-color: rgb(218, 165, 32); }
 .btn-start { background-color: rgb(50, 205, 50); }
 .btn-stop { background-color: rgb(220, 20, 60); }
 .btn-switch { background-color: white; width: 240px; margin: 0 auto; display: block; }
-.btn-db-toggle { background: none; border: none; cursor: pointer; filter: drop-shadow(0 3px 0 #000); }
+.btn-db-toggle { background: none; border: none; cursor: pointer; }
 
 /* Camera Viewport */
 .main-viewport { flex: 1; display: flex; justify-content: center; margin: 10px 0; position: relative; }
@@ -40,28 +40,25 @@ canvas { position: absolute; width: 100%; height: 100%; z-index: 2; pointer-even
 .placeholder-content { text-align: center; color: black; z-index: 0; }
 .placeholder-content p { font-weight: 900; font-size: 20px; margin-top: 10px; }
 
-/* Fix iOS Play Button */
-video::-webkit-media-controls { display:none !important; }
-
 /* Database Screen */
 .header-db { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 15px 0; }
 .title-db { margin: 0; font-size: 32px; font-weight: 900; }
-.db-controls { background: #e0e0e0; padding: 15px; border-radius: 20px; display: flex; gap: 10px; align-items: center; margin-bottom: 20px; border: 1px solid #ccc; }
+.db-controls { background: #e0e0e0; padding: 15px; border-radius: 20px; display: flex; gap: 10px; align-items: center; margin-bottom: 20px; }
 .db-controls input { flex: 1; border: 2px solid black; border-radius: 10px; padding: 12px; font-size: 18px; }
 .btn-add-db { background-color: rgb(50, 205, 50); border: 2px solid black; border-radius: 12px; font-weight: 800; padding: 0 15px; color: black; height: 50px; }
 
 .db-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-.db-item { display: flex; align-items: center; justify-content: space-between; background: white; border: 2px solid black; border-radius: 15px; padding: 15px; }
-.db-name { font-weight: bold; font-size: 22px; }
-.db-efficacy { font-size: 13px; font-weight: 800; margin-top: 4px; border: 1px solid black; padding: 2px 8px; border-radius: 6px; width: fit-content; }
+.db-item { display: flex; align-items: center; justify-content: space-between; background: white; border: 2px solid black; border-radius: 15px; padding: 12px 15px; }
+.db-name { font-weight: bold; font-size: 20px; }
+.db-efficacy { font-size: 12px; font-weight: 800; margin-top: 4px; border: 1px solid black; padding: 2px 8px; border-radius: 6px; width: fit-content; }
 .eff-high { background: #bdf7cc; }
 .eff-med { background: #ffeb99; }
 .eff-low { background: #ffb3b3; }
 
 /* Modals */
 .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; }
-.modal-content { background: rgb(248, 248, 255); border-radius: 25px; padding: 25px; width: 90%; max-width: 400px; border: 2px solid black; text-align: center; }
+.modal-content { background: rgb(248, 248, 255); border-radius: 25px; padding: 25px; width: 90%; max-width: 450px; border: 2px solid black; text-align: center; }
 .input-edit { width: 100%; border: 2px solid black; border-radius: 10px; padding: 10px; font-size: 18px; margin-bottom: 10px; }
 .photo-status-list { max-height: 150px; overflow-y: auto; margin: 10px 0; background: white; border: 1px solid #000; border-radius: 10px; }
-.photo-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; align-items: center; }
+.photo-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
 .mini-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; text-align: left; font-size: 18px; font-weight: bold; }

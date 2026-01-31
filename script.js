@@ -3,14 +3,18 @@ const canvas = document.getElementById('overlay');
 const curtain = document.getElementById('videoCurtain');
 const loader = document.getElementById('globalLoader');
 const inputFile = document.getElementById('inputFile');
+const cropModal = document.getElementById('cropModal');
+const cropImgElement = document.getElementById('cropImage');
 
-let db = JSON.parse(localStorage.getItem('faceDB_v6')) || [];
+let db = JSON.parse(localStorage.getItem('faceDB_v7')) || [];
 let faceMatcher = null;
 let isScanning = false;
 let currentFacingMode = 'environment';
 let selectedTarget = null;
 let stream = null;
 let activeEditIndex = -1;
+let cropper = null;
+let onCropComplete = null;
 
 async function init() {
     toggleLoader(true, "CARICAMENTO IA...");
@@ -52,95 +56,63 @@ function calculateEfficacy(photos) {
     return { text: `EFFICACIA: ${score}% (SCARSA)`, class: "eff-low" };
 }
 
-async function startDetection() {
-    const displaySize = { width: video.offsetWidth, height: video.offsetHeight };
-    faceapi.matchDimensions(canvas, displaySize);
-
-    const loop = async () => {
-        if (!isScanning) return;
-        const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
-        const resized = faceapi.resizeResults(detections, displaySize);
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        resized.forEach(det => {
-            const { x, y, width, height } = det.detection.box;
-            let label = "Sconosciuto";
-            let matched = false;
-
-            if (selectedTarget) {
-                const dists = selectedTarget.photos.map(p => faceapi.euclideanDistance(det.descriptor, new Float32Array(Object.values(p.descriptor))));
-                if (Math.min(...dists) < 0.6) { matched = true; label = selectedTarget.name; }
-            } else if (faceMatcher) {
-                const m = faceMatcher.findBestMatch(det.descriptor);
-                if (m.label !== 'unknown') { matched = true; label = m.label; }
-            }
-
-            const color = matched ? "rgb(124, 252, 0)" : "rgb(255, 215, 0)";
-            ctx.strokeStyle = color;
-            ctx.lineWidth = matched ? 6 : 3;
-            ctx.strokeRect(x, y, width, height);
-            ctx.fillStyle = color;
-            ctx.font = "bold 22px Arial";
-            ctx.fillText(label.toUpperCase(), x, y - 10);
+// GESTIONE RITAGLIO
+async function openCropper(file, callback) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        cropImgElement.src = e.target.result;
+        cropModal.style.display = 'flex';
+        if (cropper) cropper.destroy();
+        cropper = new Cropper(cropImgElement, {
+            aspectRatio: 1,
+            viewMode: 1,
+            autoCropArea: 1
         });
-        requestAnimationFrame(loop);
+        onCropComplete = callback;
     };
-    loop();
+    reader.readAsDataURL(file);
 }
 
-document.getElementById('btnStart').onclick = async () => {
-    isScanning = true;
-    curtain.style.display = 'block';
-    document.getElementById('placeholder').style.display = 'none';
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode, width: 1280, height: 720 } });
-        video.srcObject = stream;
-        video.onplaying = () => { 
-            video.style.opacity = "1";
-            setTimeout(() => { curtain.style.display = 'none'; startDetection(); }, 600); 
-        };
-    } catch (e) { isScanning = false; }
+document.getElementById('btnDoCrop').onclick = () => {
+    const croppedCanvas = cropper.getCroppedCanvas({ width: 400, height: 400 });
+    croppedCanvas.toBlob(async (blob) => {
+        cropModal.style.display = 'none';
+        if (onCropComplete) onCropComplete(blob);
+    }, 'image/jpeg');
 };
 
-document.getElementById('btnStop').onclick = () => {
-    isScanning = false;
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    video.srcObject = null;
-    video.style.opacity = "0";
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    document.getElementById('placeholder').style.display = 'flex';
-    selectedTarget = null;
+document.getElementById('btnCancelCrop').onclick = () => {
+    cropModal.style.display = 'none';
+    if (cropper) cropper.destroy();
 };
 
-// DATABASE ACTIONS
+// ACTIONS
 document.getElementById('btnAddPhoto').onclick = () => {
     const name = document.getElementById('newName').value;
     if (!name) return alert("Nome mancante!");
-    addPhotoToDB(name);
-};
-
-async function addPhotoToDB(name, isEditing = false) {
-    inputFile.onchange = async (e) => {
+    inputFile.onchange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        toggleLoader(true, "ANALISI BIOMETRICA...");
-        const img = await faceapi.bufferToImage(file);
-        const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-        
-        if (det) {
-            let user = db.find(u => u.name.toLowerCase() === name.toLowerCase());
-            const data = { descriptor: det.descriptor, score: det.score };
-            if (user) user.photos.push(data); else db.push({ name, photos: [data] });
-            localStorage.setItem('faceDB_v6', JSON.stringify(db));
-            updateFaceMatcher(); renderDB();
-            if(isEditing) openEditModal(activeEditIndex);
-            document.getElementById('newName').value = "";
-        } else { alert("VOLTO NON VALIDO!"); }
-        toggleLoader(false);
+        openCropper(file, (blob) => addPhotoToDB(name, blob));
     };
     inputFile.click();
+};
+
+async function addPhotoToDB(name, blob, isEditing = false) {
+    toggleLoader(true, "ANALISI BIOMETRICA...");
+    const img = await faceapi.bufferToImage(blob);
+    const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+    
+    if (det) {
+        let user = db.find(u => u.name.toLowerCase() === name.toLowerCase());
+        const data = { descriptor: det.descriptor, score: det.score };
+        if (user) user.photos.push(data); else db.push({ name, photos: [data] });
+        localStorage.setItem('faceDB_v7', JSON.stringify(db));
+        updateFaceMatcher(); renderDB();
+        if(isEditing) openEditModal(activeEditIndex);
+        document.getElementById('newName').value = "";
+    } else { alert("VOLTO NON VALIDO NELLA ZONA RITAGLIATA!"); }
+    toggleLoader(false);
 }
 
 function renderDB() {
@@ -176,22 +148,77 @@ window.openEditModal = (idx) => {
 
 document.getElementById('editNameField').oninput = (e) => {
     db[activeEditIndex].name = e.target.value;
-    localStorage.setItem('faceDB_v6', JSON.stringify(db));
+    localStorage.setItem('faceDB_v7', JSON.stringify(db));
     renderDB();
 };
 
 window.removePhoto = (ui, pi) => {
     db[ui].photos.splice(pi, 1);
     if(db[ui].photos.length === 0) { db.splice(ui, 1); document.getElementById('editModal').style.display='none'; }
-    localStorage.setItem('faceDB_v6', JSON.stringify(db));
+    localStorage.setItem('faceDB_v7', JSON.stringify(db));
     updateFaceMatcher(); renderDB();
     if(db[ui]) openEditModal(ui);
 };
 
-document.getElementById('btnAddNewPhoto').onclick = () => addPhotoToDB(db[activeEditIndex].name, true);
+document.getElementById('btnAddNewPhoto').onclick = () => {
+    inputFile.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        openCropper(file, (blob) => addPhotoToDB(db[activeEditIndex].name, blob, true));
+    };
+    inputFile.click();
+};
+
 document.getElementById('closeEditModal').onclick = () => document.getElementById('editModal').style.display = 'none';
 
-// TARGET SELECTION
+// VIDEO LOGIC
+async function startDetection() {
+    const displaySize = { width: video.offsetWidth, height: video.offsetHeight };
+    faceapi.matchDimensions(canvas, displaySize);
+    const loop = async () => {
+        if (!isScanning) return;
+        const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
+        const resized = faceapi.resizeResults(detections, displaySize);
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        resized.forEach(det => {
+            const { x, y, width, height } = det.detection.box;
+            let label = "Sconosciuto";
+            let matched = false;
+            if (selectedTarget) {
+                const dists = selectedTarget.photos.map(p => faceapi.euclideanDistance(det.descriptor, new Float32Array(Object.values(p.descriptor))));
+                if (Math.min(...dists) < 0.6) { matched = true; label = selectedTarget.name; }
+            } else if (faceMatcher) {
+                const m = faceMatcher.findBestMatch(det.descriptor);
+                if (m.label !== 'unknown') { matched = true; label = m.label; }
+            }
+            const color = matched ? "rgb(124, 252, 0)" : "rgb(255, 215, 0)";
+            ctx.strokeStyle = color; ctx.lineWidth = matched ? 6 : 3;
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = color; ctx.font = "bold 22px Arial";
+            ctx.fillText(label.toUpperCase(), x, y - 10);
+        });
+        requestAnimationFrame(loop);
+    };
+    loop();
+}
+
+document.getElementById('btnStart').onclick = async () => {
+    isScanning = true; curtain.style.display = 'block'; document.getElementById('placeholder').style.display = 'none';
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode, width: 1280, height: 720 } });
+        video.srcObject = stream;
+        video.onplaying = () => { video.style.opacity = "1"; setTimeout(() => { curtain.style.display = 'none'; startDetection(); }, 600); };
+    } catch (e) { isScanning = false; }
+};
+
+document.getElementById('btnStop').onclick = () => {
+    isScanning = false; if (stream) stream.getTracks().forEach(t => t.stop());
+    video.srcObject = null; video.style.opacity = "0";
+    const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
+    document.getElementById('placeholder').style.display = 'flex'; selectedTarget = null;
+};
+
 document.getElementById('btnTarget').onclick = () => {
     document.getElementById('targetModal').style.display = 'flex';
     const l = document.getElementById('dbTargetList');
@@ -200,15 +227,18 @@ document.getElementById('btnTarget').onclick = () => {
 };
 
 window.selT = (i) => { selectedTarget = i !== null ? db[i] : null; document.getElementById('targetModal').style.display = 'none'; };
+
 document.getElementById('uploadNewTarget').onclick = () => {
-    inputFile.onchange = async (e) => {
+    inputFile.onchange = (e) => {
         const file = e.target.files[0]; if(!file) return;
-        toggleLoader(true, "ANALISI TARGET...");
-        const img = await faceapi.bufferToImage(file);
-        const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-        if (det) { selectedTarget = { name: "Esterno", photos: [{descriptor: det.descriptor, score: det.score}] }; document.getElementById('targetModal').style.display = 'none'; }
-        else { alert("Volto non trovato!"); }
-        toggleLoader(false);
+        openCropper(file, async (blob) => {
+            toggleLoader(true, "ANALISI TARGET...");
+            const img = await faceapi.bufferToImage(blob);
+            const det = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+            if (det) { selectedTarget = { name: "Esterno", photos: [{descriptor: det.descriptor, score: det.score}] }; document.getElementById('targetModal').style.display = 'none'; }
+            else { alert("Volto non trovato!"); }
+            toggleLoader(false);
+        });
     };
     inputFile.click();
 };
@@ -216,4 +246,4 @@ document.getElementById('uploadNewTarget').onclick = () => {
 document.getElementById('btnOpenDB').onclick = () => { document.getElementById('mainScreen').classList.remove('active'); document.getElementById('dbScreen').classList.add('active'); };
 document.getElementById('btnCloseDB').onclick = () => { document.getElementById('dbScreen').classList.remove('active'); document.getElementById('mainScreen').classList.add('active'); };
 document.getElementById('btnSwitch').onclick = () => { currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user'; if(isScanning) document.getElementById('btnStart').click(); };
-window.delP = (i) => { if(confirm("Eliminare profilo?")) { db.splice(i, 1); localStorage.setItem('faceDB_v6', JSON.stringify(db)); updateFaceMatcher(); renderDB(); } };
+window.delP = (i) => { if(confirm("Eliminare profilo?")) { db.splice(i, 1); localStorage.setItem('faceDB_v7', JSON.stringify(db)); updateFaceMatcher(); renderDB(); } };
